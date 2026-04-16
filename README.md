@@ -25,10 +25,11 @@ This repository builds a local PDF Q&A system on top of:
 python -m pip install -r requirements.txt
 ```
 
-2. Set your Hugging Face token:
+2. Set up environment variables:
 
 ```bash
-set HUGGINGFACEHUB_API_TOKEN=YOUR_TOKEN_HERE
+cp .env.example .env
+# Edit .env and add your Hugging Face token
 ```
 
 3. Ingest the PDF into ChromaDB:
