@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pymupdf
+python-dotenv
+langchain
+langchain-community
+langchain-huggingface
+langchain-chroma
+chromadb
+sentence-transformers
+torch
+numpy
+pydantic
+huggingface-hub
