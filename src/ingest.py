@@ -1,13 +1,12 @@
 import fitz
 import os
-from pathlib import Path
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-from src.config import PDF_PATH, CHROMA_PATH, EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
+from .config import PDF_PATH, CHROMA_PATH, EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 
 
 def extract_text_from_pdf(pdf_path: str) -> str:
@@ -63,7 +62,3 @@ def ingest():
 
     print(f"Indexed {count} vectors")
     print("Ingestion complete!")
-
-
-if __name__ == "__main__":
-    ingest()

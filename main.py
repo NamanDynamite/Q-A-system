@@ -1,124 +1,92 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List
-import os
+from typing import List, Dict, Any
 import time
 from pathlib import Path
 import dotenv
-from huggingface_hub import InferenceClient
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 
-env_path = Path(__file__).resolve().parent / ".env"
-print(f"[DEBUG] Loading .env from {env_path}")
-print(f"[DEBUG] Existing HUGGINGFACEHUB_API_TOKEN before load: {repr(os.environ.get('HUGGINGFACEHUB_API_TOKEN'))}")
-dotenv.load_dotenv(dotenv_path=env_path, override=True)
-print(f"[DEBUG] Environment file loaded: exists={env_path.exists()}")
-print(f"[DEBUG] HUGGINGFACEHUB_API_TOKEN after load: {repr(os.environ.get('HUGGINGFACEHUB_API_TOKEN'))}")
+from src.llm import chat, expand_query
+from src.retriever import retrieve
+from src.reranker import rerank
+from src.utils import should_expand, deduplicate_docs, build_context, build_sources
 
-CHROMA_PATH = "chroma_db"
-EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
-LLM_MODEL = "meta-llama/Llama-3.2-1B-Instruct"
-HF_TOKEN_ENV_VARS = ["HUGGINGFACEHUB_API_TOKEN"]
+dotenv.load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
+
 
 app = FastAPI()
-retriever = None
-hf_client = None
+
 
 class Question(BaseModel):
     question: str
 
+
 class Answer(BaseModel):
     answer: str
-    sources: List[str]
+    sources: List[Dict[str, Any]]
 
 
-def get_hf_token() -> str:
-    for name in HF_TOKEN_ENV_VARS:
-        token = os.environ.get(name)
-        print(f"[DEBUG] Checking env var {name}: {'FOUND' if token else 'MISSING'}")
-        if token:
-            print(f"[DEBUG] Using Hugging Face token from {name}, length={len(token)}, repr={repr(token)}")
-            return token
-    raise EnvironmentError(
-        "Set HUGGINGFACEHUB_API_TOKEN to use the Hugging Face Inference API."
-    )
+QA_PROMPT = (
+    "You are a document question-answering system.\n\n" 
+    "RULES:\n" 
+    "1. Use ONLY the provided context.\n" 
+    "2. Extract ALL relevant entities when the question asks for lists (e.g., partnerships, organizations, stakeholders).\n"
+    "3. Combine information across multiple context chunks if needed.\n" 
+    "4. If the answer is not explicitly stated, infer from the context by combining related ideas.\n" 
+    "5. Prefer high-level summaries when the question asks for purpose, goal, or intent.\n" 
+    "6. DO NOT say 'not available' if a reasonable answer can be constructed from the context.\n" 
+    "7. Only say 'The information is not available.' if absolutely nothing relevant exists.\n\n" 
+    "Context:\n{context}\n\n"
+    "Question:\n{question}\n\n"
+    "Answer:"
+)
 
-
-def get_retriever():
-    global retriever
-    if retriever is None:
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        vectorstore = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-    return retriever
-
-
-def get_hf_client():
-    global hf_client
-    if hf_client is None:
-        token = get_hf_token()
-        print(f"[DEBUG] Creating InferenceClient for model {LLM_MODEL}")
-        hf_client = InferenceClient(model=LLM_MODEL, token=token)
-    return hf_client
 
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "PDF Q&A System ready"}
+    return {"status": "ok", "message": "RAG system ready"}
+
 
 @app.post("/ask", response_model=Answer)
 def ask(question: Question):
-    retriever = get_retriever()
     retrieval_start = time.time()
-    docs = retriever.invoke(question.question)
+
+    if should_expand(question.question):
+        expanded_queries = expand_query(question.question)
+    else:
+        expanded_queries = [question.question]
+
+    all_docs = []
+    for q in expanded_queries:
+        all_docs.extend(retrieve(q))
+
+    docs = deduplicate_docs(all_docs)
+
     retrieval_time = time.time() - retrieval_start
 
     if not docs:
-        raise HTTPException(status_code=404, detail="No relevant documents found for this question.")
+        raise HTTPException(status_code=404, detail="No relevant documents found.")
 
-    context = "\n\n".join([doc.page_content for doc in docs])
-    sources = [
-        f"{doc.metadata.get('source', 'document')} chunk {doc.metadata.get('chunk_id', i)}"
-        for i, doc in enumerate(docs)
-    ]
+    docs = rerank(question.question, docs)
 
-    prompt = (
-        "You are an expert assistant. Use only the context below to answer the question. "
-        "If the answer cannot be found in the context, say that it is not present.\n\n"
-        f"Context:\n{context}\n\nQuestion: {question.question}\n\nAnswer:"
-    )
+    context = build_context(docs)
+    sources = build_sources(docs)
 
-    client = get_hf_client()
+    prompt = QA_PROMPT.format(context=context, question=question.question)
+
     generation_start = time.time()
     try:
-        print(f"[DEBUG] Sending chat_completion request to {LLM_MODEL}")
-        result = client.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            model=LLM_MODEL,
-            max_tokens=220,
-            temperature=0.0,
-        )
-        generation_time = time.time() - generation_start
-        print(f"[DEBUG] Received response: {result}")
+        answer = chat(prompt)
     except Exception as err:
-        print(f"[DEBUG] chat_completion error: {repr(err)}")
-        raise HTTPException(status_code=500, detail=f"LLM inference failed: {err}")
+        raise HTTPException(status_code=500, detail=f"LLM error: {err}")
 
-    if isinstance(result, dict) and "choices" in result:
-        answer = result["choices"][0]["message"]["content"].strip()
-    else:
-        answer = str(result).strip()
-
-    if answer.startswith(prompt):
-        answer = answer[len(prompt) :].strip()
+    generation_time = time.time() - generation_start
     answer = answer.split("Answer:")[-1].strip()
 
-    print(
-        f"retrieval={retrieval_time:.3f}s generation={generation_time:.3f}s "
-        f"source_count={len(sources)}"
-    )
+    print(f"retrieval={retrieval_time:.3f}s | generation={generation_time:.3f}s | docs={len(docs)}")
+
     return Answer(answer=answer, sources=sources)
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=8000)

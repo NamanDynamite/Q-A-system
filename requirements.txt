@@ -12,3 +12,4 @@ torch
 numpy
 pydantic
 huggingface-hub
+groq
