@@ -10,12 +10,12 @@ A local PDF Q&A system built with FastAPI, ChromaDB, and Groq for LLM inference.
 
  Architecture
 
- Component                          Choice                                 Reason 
+ Component                          |Choice                                 |Reason 
 
- Embeddings    sentence-transformers/all-mpnet-base-v2    High-quality dense embeddings, open-source 
- Vector Store  ChromaDB                     Persistent storage, easy LangChain integration, lightweight 
- LLM           Groq llama-3.3-70b-versatile                    Fast inference via Groq API 
- API           FastAPI                                      Fast, async-capable, automatic OpenAPI docs 
+ Embeddings    |sentence-transformers/all-mpnet-base-v2    |High-quality dense embeddings, open-source. 
+ Vector Store  |ChromaDB                     |Persistent storage, easy LangChain integration, lightweight. 
+ LLM           |Groq llama-3.3-70b-versatile                    |Fast inference via Groq API. 
+ API           |FastAPI                                      |Fast, async-capable, automatic OpenAPI docs. 
 
  Files
 
@@ -86,15 +86,15 @@ For larger datasets: consider Weaviate (HNSW indexing) or Pinecone (managed, sca
 
  Flat (exact) search — With ~168 vectors, brute-force is fastest
 Search type: MMR (Maximum Marginal Relevance) for diversity
-k: 20 fetch, 8 returned
+k: 15 fetch, 8 returned
 
  Latency Benchmarks
 
- Stage           Cold          Warm 
+ Stage           |Cold          |Warm 
 
- Retrieval       ~0.23s        ~0.06s 
- LLM generation  ~0.8s         ~0.8s 
- Total           ~1.0s         ~0.9s
+ Retrieval       |~0.23s        |~0.06s. 
+ LLM generation  |~0.8s         |~0.8s. 
+ Total           |~1.0s         |~0.9s.
 
 Cold = first request (model loads). Warm = subsequent requests.
 
@@ -145,16 +145,16 @@ json
 
  What Breaks
 
- Issue                                     Cause                               Fix 
+ Issue                                     |Cause                               |Fix 
 
-Questions 6-8 return unrelated answers     Content not in retrieved context    Expand chunk size, add more chunks (k>20) 
-Query expansion adds latency               Extra LLM call per query            Cache expansions 
-Reranking slow on long docs                Truncation at 512 chars             Increase truncation limit   
+Questions 6-8 return unrelated answers     |Content not in retrieved context    |Expand chunk size, add more chunks (k>15). 
+Query expansion adds latency               |Extra LLM call per query            |Cache expansions. 
+Reranking slow on long docs                |Truncation at 412 chars             |Increase truncation limit.   
 
  Root Cause Analysis
 
 1. Coverage gaps: Some sections (governance, diversity) may be sparse in PDF
-2. Retrieval recall: k=20 may miss low-ranking relevant chunks
+2. Retrieval recall: k=15 may miss low-ranking relevant chunks
 3. Chunk boundaries: 800 chars may split tables mid-row
 
  What I'd Fix First
