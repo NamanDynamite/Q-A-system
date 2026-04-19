@@ -159,6 +159,6 @@ Reranking slow on long docs                |Truncation at 412 chars             
 
  What I'd Fix First
 
-1. Increase fetch_k to 50 — Better recall for edge cases
+1. Increase fetch_k to 40 — Better recall for edge cases
 2. Add section-aware chunking — Use PDF headings as chunk boundaries
 3. Hybrid search — Combine keyword (BM25) with semantic search
