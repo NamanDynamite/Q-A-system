@@ -29,7 +29,6 @@ src/
   ingest.py   - PDF extraction + chunking
 
 main.py         - FastAPI entry
-ingest.py       - CLI entry
 
 
 
@@ -43,7 +42,7 @@ pip install -r requirements.txt
  Add GROQ_API_KEY to .env file
 
  Ingest PDF
-python ingest.py
+python -m src.ingest
 
  Start server
 python main.py
