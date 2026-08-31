@@ -14,9 +14,6 @@ __pycache__/
 chroma_db/
 .kilo/
 
-# Data
-Data/
-
 # IDE
 .vscode/
 .idea/
