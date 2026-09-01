@@ -51,24 +51,24 @@ def ingest():
     pdf_paths = get_pdf_paths()
 
     if os.path.exists(CHROMA_PATH):
-        print(f"Clearing existing ChromaDB at {CHROMA_PATH}...")
+        print(f"Clearing existing ChromaDB at {CHROMA_PATH}")
         shutil.rmtree(CHROMA_PATH)
 
     all_documents: list[Document] = []
     for pdf_path in pdf_paths:
-        print(f"Extracting text from {pdf_path}...")
+        print(f"Extracting text from {pdf_path}")
         text = extract_text_from_pdf(pdf_path)
         print(f"Extracted {len(text)} characters from {pdf_path}")
 
-        print(f"Creating documents from {pdf_path}...")
+        print(f"Creating documents from {pdf_path}")
         documents = create_documents(text, source=pdf_path)
         print(f"Created {len(documents)} chunks from {pdf_path}")
         all_documents.extend(documents)
 
-    print(f"Loading embedding model: {EMBEDDING_MODEL}...")
+    print(f"Loading embedding model: {EMBEDDING_MODEL}")
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
-    print(f"Creating ChromaDB at {CHROMA_PATH}...")
+    print(f"Creating ChromaDB at {CHROMA_PATH}")
     vectorstore = Chroma.from_documents(
         documents=all_documents,
         embedding=embeddings,
